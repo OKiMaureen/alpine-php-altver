@@ -1,0 +1,9 @@
+
+**
+!.gitignore
+!Readme.md
+!build.sh
+!build_all.sh
+!fetch_apkbuild.sh
+!indocker.sh
+!utils.sh
