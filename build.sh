@@ -4,7 +4,7 @@ set -eo pipefail
 # ./build.sh edge 7 98895c000a87c887cd4f0cac37e0c9b875ee43eb
 
 self="$0"
-script_dir=$(dirname "$self")
+script_dir=$(realpath "$(dirname "$self")")
 
 . "${script_dir}/utils.sh"
 
@@ -33,7 +33,7 @@ build_apk()
         -t \
         -e "SIGN_NAME=${SIGN_NAME}" \
         -e "CI=${CI}" \
-        -v "$(realpath .):/work:rw,rshared" \
+        -v "${script_dir}:/work:rw,rshared" \
         "alpine:${alpinever#v}" /work/indocker.sh \
             "$alpinever" "$suffix" "$ref"
 }

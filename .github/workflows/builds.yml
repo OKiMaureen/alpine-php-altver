@@ -1,0 +1,126 @@
+
+name: Automatic build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '42 3 * * *'
+
+env:
+  storage_repository: ${{ github.repository }}-storage
+  SIGN_NAME: "phpaltver-60dd1390"
+
+jobs:
+  prepare:
+    name: Prepare things to build
+    runs-on: ubuntu-latest
+    outputs:
+      tasks: ${{steps.check.outputs.tasks}}
+      key: ${{steps.check.outputs.key}}
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v2
+      - name: Check if all tasks have built
+        shell: bash
+        id: check
+        run: |
+          BUILD_APK=output_tasks ./build_all.sh
+          # mock tasks
+          #echo "edge 7.3 98895c000a87c887cd4f0cac37e0c9b875ee43eb" > tasks
+          # generate tables
+          printf "::set-output name=tasks::"
+          python -c 'import json;print(json.dumps({"include":[dict(zip(("alpinever","phpver","ref"),a))for l in open("tasks").readlines()if(a:=l.split())]}))'
+          #php -r '$f=fopen("tasks","r");while($l=fgets($f)){$a=explode(" ",trim($l));$x["include"][]=["alpinever"=>$a[0],"phpver"=>$a[1],"ref"=>$a[2]];};echo json_encode($x);'
+          #node -e 'f=require("fs").readFileSync("tasks",{encoding:"utf8"});x=f.split(/\n/).map((e)=>((a=e.split(" ")),{alpinever:a[0],phpver:a[1],ref:a[2]}));x.pop();console.log(JSON.stringify({include:x}))'
+
+          cat <<EOF > sign.rsa
+          ${{ secrets.ABUILD_SIGN }}
+          EOF
+          openssl rsa -pubout -in sign.rsa -out ${{ env.SIGN_NAME }}.rsa.pub
+          curl -sfSL https://raw.githubusercontent.com/${{ env.storage_repository }}/latest/index -o index
+          php -r '($h=md5(trim(file_get_contents("tasks"))))===md5(trim(file_get_contents("index")))||print("::set-output name=key::$h\n");'
+      - name: Upload taskslist and pubkey
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.check.outputs.key }}
+          retention-days: 1
+          path: |
+            tasks
+            ${{ env.SIGN_NAME }}.rsa.pub
+
+  build:
+    needs:
+      - prepare
+    if: ${{ needs.prepare.outputs.key }}
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.prepare.outputs.tasks)}}
+    name: Build PHP${{ matrix.phpver }} for ${{ matrix.alpinever }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v2
+      - name: Build apks
+        run: |
+          cat <<EOF > sign.rsa
+          ${{ secrets.ABUILD_SIGN }}
+          EOF
+          chmod 0400 sign.rsa
+          phpver="${{ matrix.phpver }}"
+          suffix="${phpver%%.*}"
+          ./build.sh '${{ matrix.alpinever }}' "${suffix}" '${{ matrix.ref }}'
+          # mock generate
+          #mkdir -p ${{ matrix.alpinever }}/phpaltver/x86_64
+          #printf "ELF\x01" > ${{ matrix.alpinever }}/phpaltver/x86_64/APKINDEX.tar.gz
+          #printf "\xca\xfe\xba\xbe" > ${{ matrix.alpinever }}/phpaltver/x86_64/php${suffix}-${{ matrix.phpver }}-r0.apk
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ needs.prepare.outputs.key }}
+          retention-days: 1
+          path: |
+            ${{ matrix.alpinever }}
+            # not used
+            # without this, ver dir like edge/v3.14 will be omitted
+            Readme.md
+  
+  upload:
+    needs:
+      - prepare
+      - build
+    if: ${{ needs.prepare.outputs.key }}
+    name: Upload packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ needs.prepare.outputs.key }}
+      - name: Checkout storage
+        uses: actions/checkout@v2
+        with:
+          repository: ${{env.storage_repository}}
+          ref: base
+          ssh-key: ${{ secrets.STORAGE_KEY }}
+          path: storage
+          fetch-depth: 1
+          lfs: true
+      - name: Upload to storage
+        shell: bash
+        run: |
+          while read line
+          do
+            cp -r "${line%% *}" storage/
+          done < tasks
+          cp tasks storage/index
+          cp ${{ env.SIGN_NAME }}.rsa.pub storage/
+          cd storage
+          git branch -M latest
+          git lfs install
+          git lfs track "*.apk"
+          git lfs track "*.gz"
+          git add -A
+          git config user.name "dixyes-bot"
+          git config user.email "me@dixy.es"
+          git commit -m "Update at $(date +"%Y%m%d")"
+          git push origin +latest

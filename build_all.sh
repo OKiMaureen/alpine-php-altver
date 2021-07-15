@@ -11,7 +11,7 @@ SUPPORTED_VERSIONS=(edge v3.14 v3.13 v3.12 v3.11 v3.10)
 #SUPPORTED_VERSIONS=(edge v3.14 v3.13)
 ARCH="${ARCH:-x86_64}"
 TMP_DIR="${TMP_DIR:-/tmp}"
-BUILD_APK="${BUILD_APK:-build_apk}"
+BUILD_APK="${BUILD_APK:-call_build_apk}"
 
 script_dir=$(dirname "$0")
 
@@ -19,9 +19,14 @@ export IN_BUILD_ALL=1
 . "${script_dir}/utils.sh"
 . "${script_dir}/build.sh"
 
+call_build_apk()
+{
+    build_apk "$1" "${2%%.*}" "$3"
+}
+
 output_tasks()
 {
-    echo "::set-output name=$1-$2::$3"
+    echo "$1 $2 $3" >> "${script_dir}/tasks"
 }
 
 build_versions()
@@ -86,7 +91,7 @@ build_versions()
             [ "${php7_versions[i]}" = "${phpver}" ] && continue
             apkbuild_from="${apkbuild_froms[j]}"
             commit=$(grep -zoPe '\nP:php'"${phpmaj}"'\n(?s:.+?)c:\K[^\n]+' "APKINDEX.${apkbuild_from}" | grep -oaPe '^[a-fA-F0-9]+')
-            ${BUILD_APK} "${alpinever}" "${phpmaj}" "${commit}"
+            ${BUILD_APK} "${alpinever}" "${phpver}" "${commit}"
         done
     done
 }

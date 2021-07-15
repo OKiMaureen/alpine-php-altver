@@ -7,3 +7,5 @@
 !fetch_apkbuild.sh
 !indocker.sh
 !utils.sh
+!.github
+!.github/**
