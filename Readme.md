@@ -18,7 +18,7 @@ Examples following is assuming you are root, or in docker without modifing user.
 ### Add signature
 
 <!-- remember to modify this url when forking -->
-You need get the key from https://raw.githubusercontent.com/dixyes/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub
+You need get the key from <https://raw.githubusercontent.com/dixyes/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub>
 
 And add it to your /etc/apk/keys/ directory
 
@@ -50,10 +50,13 @@ apk update
 ### Install a version of PHP that you want
 
 ```bash
+# you can use "<", ">", "~" syntax to specify which version you want
+# remember to quote it because "<" ">" is bash operator
 # assuming you are using edge
 # use this to install PHP 7.3
-apk add 'php7<7.4' # you can use "<", ">", "~" syntax to specify which version you want, remember quote it because "<" ">" is bash operator
-
+apk add 'php7~7.3'
+# or if you want to install PHP 7.4 (it's newer than 7.3) at v3.10
+apk add 'php7>7.3'
 # or if you want to install PHP 8.0 at v3.10
 apk add php8
 ```
