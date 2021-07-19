@@ -26,7 +26,8 @@ jobs:
         run: |
           BUILD_APK=output_tasks ./build_all.sh
           # mock tasks
-          #echo "edge 7.3 98895c000a87c887cd4f0cac37e0c9b875ee43eb" > tasks
+          #echo "v3.12 8.0 3889077692cc6e95291c099f3f1a077348c70a30" > tasks
+          #echo "v3.12 7.4 bf271a7e6e8a836dec2e661cf08df25f35813259" >> tasks
           # generate tables
           printf "::set-output name=tasks::"
           python -c 'import json;print(json.dumps({"include":[dict(zip(("alpinever","phpver","ref"),a))for l in open("tasks").readlines()if(a:=l.split())]}))'
@@ -40,6 +41,7 @@ jobs:
           curl -sfSL https://raw.githubusercontent.com/${{ env.storage_repository }}/latest/index -o index
           php -r '($h=md5(trim(file_get_contents("tasks"))))===md5(trim(file_get_contents("index")))||print("::set-output name=key::$h\n");'
       - name: Upload taskslist and pubkey
+        if: ${{ steps.check.outputs.key }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.check.outputs.key }}
@@ -83,7 +85,6 @@ jobs:
             # not used
             # without this, ver dir like edge/v3.14 will be omitted
             Readme.md
-  
   upload:
     needs:
       - prepare
@@ -108,12 +109,30 @@ jobs:
       - name: Upload to storage
         shell: bash
         run: |
+          # regenerate indexes
+          cat <<EOF > ${{ env.SIGN_NAME }}.rsa
+          ${{ secrets.ABUILD_SIGN }}
+          EOF
+          curl -sfSL https://raw.githubusercontent.com/${{ github.repository }}/latest/utils.sh -o utils.sh
+          curl -sfSL https://raw.githubusercontent.com/${{ github.repository }}/latest/regenerate_apkindex.sh -o regenerate_apkindex.sh
+          chmod 0755 regenerate_apkindex.sh utils.sh
+          docker run \
+            --name rebuildindex \
+            --rm \
+            -v `realpath .`:/work:rw,rshared \
+            -e SIGN_NAME=${{ env.SIGN_NAME }} \
+            -e CI=$CI \
+            -w /work \
+            alpine:edge ./regenerate_apkindex.sh
+          echo "::endgroup::"
+          # copy files
           while read line
           do
             cp -r "${line%% *}" storage/
           done < tasks
           cp tasks storage/index
           cp ${{ env.SIGN_NAME }}.rsa.pub storage/
+          # update files
           cd storage
           git branch -M latest
           git lfs install

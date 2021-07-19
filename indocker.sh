@@ -67,6 +67,7 @@ mian()
     # allow user create subdirs
     chown "${BUILD_USER}:${BUILD_USER}" "$destdir"
     sudo -u user env \
+        DESCRIPTION="phpaltver" \
         options="!check" \
         abuild -P "${script_dir}/${alpinever}" -r
     # chown back to root

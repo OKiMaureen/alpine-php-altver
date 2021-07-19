@@ -6,6 +6,7 @@
 !build_all.sh
 !fetch_apkbuild.sh
 !indocker.sh
+!regenerate_apkindex.sh
 !utils.sh
 !.github
 !.github/**
