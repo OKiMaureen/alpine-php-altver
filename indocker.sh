@@ -5,6 +5,7 @@ set -eo pipefail
 
 SIGN_NAME="${SIGN_NAME:-signkey-60dd1390}"
 BUILD_USER="${BUILD_USER:-user}"
+ALPINE_VERSION="$1"
 
 script_dir=$(dirname "$0")
 
@@ -37,48 +38,175 @@ prepare()
     chown "${BUILD_USER}:${BUILD_USER}" -R "/home/${BUILD_USER}/"
 }
 
-mian()
+cd_builddir()
 {
-    local alpinever="$1"
-    [ -z "$alpinever" ] && exit 1
+    package="$1"
+    [ -z "$package" ] && exit 1
+    # a little hacky here:
+    # abuild will use upper dir name "phpaltver" as repo name
+    local builddir="/home/${BUILD_USER}/phpaltver/$package"
+    [ -d "${builddir}" ] || {
+        info "Create build dir for $package" >&2
+        sudo -u "$BUILD_USER" mkdir -p "${builddir}"
+    }
+    cd "$builddir"
+}
+
+build_package()
+{
+    package="$1"
+    [ -z "$package" ] && exit 1
+
+    group "Start build $package"
+    cd_builddir "$package"
+    local destdir="${script_dir}/${ALPINE_VERSION}"
+    mkdir -p "$destdir"
+    # allow user create subdirs
+    chown "${BUILD_USER}:${BUILD_USER}" "$destdir"
+    local ret=0
+    sudo -u user env \
+        DESCRIPTION="phpaltver" \
+        options="!check" \
+        abuild -P "${script_dir}/${ALPINE_VERSION}" -r || ret=$?
+    echo # abuild sometimes writes a ^[[0m at last without not lf
+    # chown back to root
+    chown "root:root" "$destdir"
+    return $ret
+}
+
+prepare_php()
+{
     local suffix="$2"
     [ -z "$suffix" ] && exit 1
     local ref="$3"
     [ -z "$ref" ] && exit 1
 
-    prepare
-
-    # a little hacky here:
-    # abuild will use upper dir name "phpaltver" as repo name
-    local builddir="/home/${BUILD_USER}/phpaltver/php${suffix}"
-    [ -d "${builddir}" ] || {
-        group "Prepare build dir"
-        sudo -u "$BUILD_USER" mkdir -p "${builddir}"
-    }
-    cd "$builddir"
-
-    group "Fetching files"
-    fetch_apkbuild "$@"
+    group "Fetching files for php$suffix"
+    cd_builddir "php$suffix"
+    fetch_apkbuild "$ALPINE_VERSION" "php$suffix" "$ref"
     sudo -u "$BUILD_USER" abuild checksum
+}
 
-    group "Start build"
-    local destdir="${script_dir}/${alpinever}"
-    mkdir -p "$destdir"
-    # allow user create subdirs
-    chown "${BUILD_USER}:${BUILD_USER}" "$destdir"
-    sudo -u user env \
-        DESCRIPTION="phpaltver" \
-        options="!check" \
-        abuild -P "${script_dir}/${alpinever}" -r
-    # chown back to root
-    chown "root:root" "$destdir"
+depend_merge()
+{
+    local packages="$1"
+    [ -z "$packages" ] && exit 1
+    local package="$2"
+    [ -z "$package" ] && exit 1
 
-    #info "copy out things"
-    #find /home/user/packages \
-    #    -name '*.apk' \
-    #    -type f \
-    #    -exec cp {} "${script_dir}/${alpinever}" \;
-        #sh -c 'fn=$1; cp $fn "'"${script_dir}"'/'"$alpinever"'-$(basename $fn)"' _ {} \;
+    cd_builddir "$package"
+    : echo depend_merge "$package" >&2
+
+    local depends
+    depends="$(grep -oPe '^\s*depends="\K[^"]+' APKBUILD)"
+    depends="$depends $(grep -oPe '^\s*makedepends="\K[^"]+' APKBUILD)"
+    local depend
+    local used
+    for depend in $depends
+    do
+        if echo "$packages" | grep -e "$depend" >/tmp/nonce
+        then
+            depend_merge "$packages" "$depend"
+            used="${used} ${depend}"
+        fi
+    done
+    : echo depend_merge "$package" = "$used" >&2
+    echo "$package"
+}
+
+prepare_pecl()
+{
+    local suffix="$2"
+    [ -z "$suffix" ] && exit 1
+    local ref="$3"
+    [ -z "$ref" ] && exit 1
+
+    local packages=""
+    local package
+
+    info "fetching file list for pecl packages"
+    curl -sfSL \
+        "https://git.alpinelinux.org/aports/plain/community?id=${ref}" \
+        -o "/tmp/list.html" \
+        --retry 3 || {
+        err "failed fetching file list"
+        return 1
+    }
+    grep -oPe '>\Kphp'"${suffix}"'-[^<]+' /tmp/list.html > /tmp/list
+    rm /tmp/list.html
+
+    while read -r package
+    do
+        packages="$packages $package"
+    done < /tmp/list
+    sed -i '/^php7-pecl-couchbase$/d' /tmp/list # for unsolvable api change
+    # download APKBUILDs and files
+    for package in $packages
+    do
+        cd_builddir "$package"
+
+        group "Fetching files for ${package}"
+        fetch_apkbuild "$ALPINE_VERSION" "$package" "$ref"
+        #sudo -u "$BUILD_USER" abuild checksum
+        #echo # abuild sometimes writes a ^[[0m at last without not lf
+    done
+    # donot rm /tmp/list
+}
+
+build_pecl()
+{
+    local suffix="$2"
+    [ -z "$suffix" ] && exit 1
+    local ref="$3"
+    [ -z "$ref" ] && exit 1
+
+    local packages=""
+    local package
+
+    # read package list from /tmp/list
+    while read -r package
+    do
+        packages="$packages $package"
+    done < /tmp/list
+
+    # resolve dependencies and rearrange
+    for package in $packages
+    do
+        depend_merge "$packages" "$package"
+    done > /tmp/merged_list
+
+    # use php to make it unique
+    packages=$("php$suffix" -r '$''a=array_unique(preg_split("/\s/",file_get_contents("/tmp/merged_list")));ksort($''a); echo implode(" ",$''a)."\n";')
+    rm /tmp/merged_list
+
+    # start build
+    for package in $packages
+    do
+        build_package "$package" || {
+            warn "failed to build pecl extension $package"
+        }
+        find "${script_dir}/${ALPINE_VERSION}/phpaltver/x86_64" \
+            -type f \
+            -name "${package}*.apk" \
+            -exec apk add --no-progress {} \;
+    done
+}
+
+install_all()
+{
+    #shellcheck disable=SC2046
+    apk add --no-progress $(find "${script_dir}/${ALPINE_VERSION}/phpaltver/x86_64" -type f -name "*.apk")
+}
+
+mian()
+{
+    prepare
+    prepare_php "$@"
+    prepare_pecl "$@"
+    chown -R "${BUILD_USER}:${BUILD_USER}" "/home/${BUILD_USER}"
+    build_package "php$2"
+    install_all
+    build_pecl "$@"
 }
 
 mian "$@"

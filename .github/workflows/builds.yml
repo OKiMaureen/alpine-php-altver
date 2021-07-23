@@ -3,6 +3,11 @@ name: Automatic build
 
 on:
   workflow_dispatch:
+    inputs:
+      noupload:
+        description: Skip upload built packages, default is true
+        default: "true"
+        required: true
   schedule:
     - cron: '42 3 * * *'
 
@@ -28,6 +33,7 @@ jobs:
           # mock tasks
           #echo "v3.12 8.0 3889077692cc6e95291c099f3f1a077348c70a30" > tasks
           #echo "v3.12 7.4 bf271a7e6e8a836dec2e661cf08df25f35813259" >> tasks
+          #echo "edge 7.3 98895c000a87c887cd4f0cac37e0c9b875ee43eb" >> tasks
           # generate tables
           printf "::set-output name=tasks::"
           python -c 'import json;print(json.dumps({"include":[dict(zip(("alpinever","phpver","ref"),a))for l in open("tasks").readlines()if(a:=l.split())]}))'
@@ -39,7 +45,17 @@ jobs:
           EOF
           openssl rsa -pubout -in sign.rsa -out ${{ env.SIGN_NAME }}.rsa.pub
           curl -sfSL https://raw.githubusercontent.com/${{ env.storage_repository }}/latest/index -o index
-          php -r '($h=md5(trim(file_get_contents("tasks"))))===md5(trim(file_get_contents("index")))||print("::set-output name=key::$h\n");'
+          noupload="${{github.event_name == 'workflow_dispatch' && github.event.inputs.noupload || 'false'}}"
+          if [ "$noupload" = "1" ] ||
+            [ "$noupload" = "true" ] ||
+            [ "$noupload" = "yes" ] ||
+            [ "$noupload" = "y" ] ||
+            [ "$noupload" = "on" ]
+          then
+            echo "Manully building, skip upload"
+          else
+            php -r '($h=md5(trim(file_get_contents("tasks"))))===md5(trim(file_get_contents("index")))||print("::set-output name=key::$h\n");'
+          fi
       - name: Upload taskslist and pubkey
         if: ${{ steps.check.outputs.key }}
         uses: actions/upload-artifact@v2
@@ -53,7 +69,7 @@ jobs:
   build:
     needs:
       - prepare
-    if: ${{ needs.prepare.outputs.key }}
+    if: ${{ needs.prepare.outputs.key || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix: ${{fromJson(needs.prepare.outputs.tasks)}}
@@ -77,6 +93,7 @@ jobs:
           #printf "\xca\xfe\xba\xbe" > ${{ matrix.alpinever }}/phpaltver/x86_64/php${suffix}-${{ matrix.phpver }}-r0.apk
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
+        if: ${{ needs.prepare.outputs.key }}
         with:
           name: ${{ needs.prepare.outputs.key }}
           retention-days: 1
