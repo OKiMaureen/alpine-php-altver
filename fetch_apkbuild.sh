@@ -24,6 +24,9 @@ patch_file()
                 sed -i 's|[a-zA-Z0-9]\{128\}\s\+enchant-2.patch||g' APKBUILD
                 sed -i 's|enchant-2.patch||g' APKBUILD
             fi
+            info "patching APKBUILD for version alignment"
+            #shellcheck disable=SC2016
+            sed -i 's|^depends="\$pkgname-common"$|depends="\$pkgname-common=\$pkgver-r\$pkgrel"|' APKBUILD
             ;;
         *)
             info "skipping patch $fn"

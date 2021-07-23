@@ -4,7 +4,10 @@ Alernative php versions for alpine linux.
 
 You can install PHP 7.3 at alpine edge or install PHP 8.0 at alpine 3.10 by using this repository.
 
-All apks is built in Github actions from offical APKBUILDs with minor modification (for package name "enchant" to "enchant-2" change).
+All apks is built in Github actions from offical APKBUILDs with minor modification:
+
+- package name "enchant" to "enchant-2" change
+- version alignment
 
 <!-- remember to modify this url when forking -->
 Built APKINDEX and apks is provided via Github LFS in [alpine-php-altver-storage](https://github.com/dixyes/alpine-php-altver-storage) repository.
