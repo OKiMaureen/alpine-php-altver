@@ -2,14 +2,8 @@
 name: Automatic build
 
 on:
-  workflow_dispatch:
-    inputs:
-      noupload:
-        description: Skip upload built packages, default is true
-        default: "true"
-        required: true
-  schedule:
-    - cron: '42 3 * * *'
+ push:
+    
 
 env:
   storage_repository: ${{ github.repository }}-storage
