@@ -10,7 +10,7 @@ All apks is built in Github actions from offical APKBUILDs with minor modificati
 - version alignment
 
 <!-- remember to modify this url when forking -->
-Built APKINDEX and apks is provided via Github LFS in [alpine-php-altver-storage](https://github.com/dixyes/alpine-php-altver-storage) repository.
+Built APKINDEX and apks is provided via Github LFS in [alpine-php-altver-storage](https://github.com/hyperf/alpine-php-altver-storage) repository.
 
 ## Usage
 
@@ -21,16 +21,16 @@ Examples following is assuming you are root, or in docker without modifing user.
 ### Add signature
 
 <!-- remember to modify this url when forking -->
-You need get the key from <https://raw.githubusercontent.com/dixyes/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub>
+You need get the key from <https://raw.githubusercontent.com/hyperf/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub>
 
 And add it to your /etc/apk/keys/ directory
 
 <!-- remember to modify this key name and url when forking -->
 
 ```bash
-wget -O /etc/apk/keys/phpaltver-60dd1390.rsa.pub https://raw.githubusercontent.com/dixyes/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub
+wget -O /etc/apk/keys/phpaltver-60dd1390.rsa.pub https://raw.githubusercontent.com/hyperf/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub
 # or if you prefer curl
-curl -o /etc/apk/keys/phpaltver-60dd1390.rsa.pub https://raw.githubusercontent.com/dixyes/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub
+curl -o /etc/apk/keys/phpaltver-60dd1390.rsa.pub https://raw.githubusercontent.com/hyperf/alpine-php-altver-storage/latest/phpaltver-60dd1390.rsa.pub
 ```
 
 ### Add repository url
@@ -41,10 +41,10 @@ Then add repository to your apk configuration, remember to modify the url to mat
 
 ```bash
 # assuming you are using edge
-echo "https://media.githubusercontent.com/media/dixyes/alpine-php-altver-storage/latest/edge/phpaltver" >> /etc/apk/repositories
+echo "https://media.githubusercontent.com/media/hyperf/alpine-php-altver-storage/latest/edge/phpaltver" >> /etc/apk/repositories
 #                                                                                       ^ here is your alpine version "edge"
 # or v3.10
-echo "https://media.githubusercontent.com/media/dixyes/alpine-php-altver-storage/latest/v3.10/phpaltver" >> /etc/apk/repositories
+echo "https://media.githubusercontent.com/media/hyperf/alpine-php-altver-storage/latest/v3.10/phpaltver" >> /etc/apk/repositories
 #                                                                                       ^ here is your alpine version "v3.10"
 # then update apk cache
 apk update
